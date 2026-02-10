@@ -15,7 +15,6 @@
 #
 # Notes:
 # - Replace 'PATH_TO_HSPIP_INSTALLATION' with your local HSPiP directory (e.g., 'C:\Path\To\HSPiP').
-# - Anonymized paths for sharing; update as needed.
 # - Handles invalid SMILES, retries, and preserves original order with NaN for failures.
 # - Logs to 'hspip_processing.log' and console.
 # - Batch size, retries, and delays configurable for system load.
