@@ -23,14 +23,32 @@ This repository provides scripts to retrieve SMILES, InChI, IUPAC names, and oth
 
 ## Requirements
 ### Must-Haves
-- **Python 3.x**: Install via [python.org](https://www.python.org/).
-  - Required packages: `requests` (`pip install requests`).
-  - For `HSPiP_CLI_v7.py`: Also install `pandas`, `numpy`, `rdkit` (recommended via conda: `conda install -c conda-forge rdkit`), `pyperclip`, and `argparse` (`pip install` for the others).
-- **MATLAB**: Base installation (no extra toolboxes needed). Tested on recent versions.
-- **HSPiP Software**: Must be installed with CLI mode enabled. Obtain from official providers (e.g., [hansen-solubility.com](https://www.hansen-solubility.com/)). CLI requires a specific license—contact HSPiP support if unsure. Update script paths to point to your local HSPiP installation directory.
+- **Python 3.x** … (unchanged)
+- **MATLAB** … (unchanged)
+- **HSPiP Software**: Must be installed with CLI mode enabled.  
+  Obtain from the official HSPiP website: [HSPiP | Hansen Solubility Parameters](https://www.hansen-solubility.com/HSPiP).  
+  CLI requires a specific license—contact HSPiP support if unsure.  
+  For details on the Command Line Interface, see [HSPiP CLI Documentation](https://www.hansen-solubility.com/HSPiP/CLI.php).
 
 ### Optional
-- A MATLAB `.mat` file with CAS numbers (see example below). If not using MATLAB, prepare a CSV or TXT file with SMILES directly.
+- A MATLAB `.mat` file with CAS numbers (see example below).
+
+**Note**: No internet access is needed for HSPiP computation, but PubChem queries require it. Ensure compliance with [PubChem API terms](https://pubchem.ncbi.nlm.nih.gov/docs/programmatic-access).
+
+---
+
+> **⚠️ IMPORTANT: Update Paths Before Running**
+>
+> You **must** edit `HSPiP_CLI_v7.py` (and optionally `CAS2SMILES2HSPiP.m`):
+>
+> - **Line 151** → `hspip_path = 'PATH_TO_HSPIP_INSTALLATION'`  
+>   Example: `'C:\\Program Files\\Hansen-Solubility\\HSPiP'`
+>
+> - **Line 251** → `fold = 'PATH_TO_WORKING_DIRECTORY'` (optional)  
+>   Only needed if you want the script to return to a specific folder after processing.  
+>   You can comment out or delete these two lines if everything runs in the same folder.
+>
+> Replace the placeholder strings with your actual paths (use double backslashes `\\` on Windows).
 
 **Note**: No internet access is needed for HSPiP computation, but PubChem queries require it. Ensure compliance with [PubChem API terms](https://pubchem.ncbi.nlm.nih.gov/docs/programmatic-access) (e.g., rate limits: ~5 requests/second).
 
@@ -43,7 +61,7 @@ This repository provides scripts to retrieve SMILES, InChI, IUPAC names, and oth
                         cas_list = {'50-00-0', '67-56-1'};  % Formaldehyde and Methanol CAS numbers
                         save('cas_input.mat', 'cas_list');
 
-4. Update paths in `CAS2SMILES2HSPiP.m` and other scripts (e.g., HSPiP install dir, Python executable).
+4. Update paths in `CAS2SMILES2HSPiP.m` and other scripts (e.g., HSPiP install dir, Python executable). **as shown in the ⚠️ IMPORTANT box above.**
 5. Run in MATLAB: Open and execute `CAS2SMILES2HSPiP.m`. It will:
 - Load CAS from `.mat`.
 - Call `get_smiles_InChI_IUPAC_props.py` for PubChem data.
