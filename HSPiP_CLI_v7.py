@@ -14,7 +14,7 @@
 # python HSPiP_CLI_v7.py <smiles_file.csv or .txt>
 #
 # Notes:
-# - Replace 'PATH_TO_HSPIP_INSTALLATION' with your local HSPiP directory (e.g., 'C:\Path\To\HSPiP').
+# - Set HSPIP_PATH to the HSPiP directory or executable. HSPIP_WORKDIR is optional.
 # - Handles invalid SMILES, retries, and preserves original order with NaN for failures.
 # - Logs to 'hspip_processing.log' and console.
 # - Batch size, retries, and delays configurable for system load.
@@ -24,17 +24,11 @@
 
 import os
 import subprocess
-import pandas as pd
-import numpy as np
 from pathlib import Path
-from rdkit import Chem
 import logging
 from datetime import datetime
 import time
-import shutil
-import pyperclip
 import argparse
-import sys
 
 # Set up command-line argument parsing
 parser = argparse.ArgumentParser(description="Process SMILES files with HSPiP CLI.")
@@ -45,15 +39,33 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-# Validate the provided file
-smiles_file = args.smiles_file
-file_extension = Path(smiles_file).suffix.lower()
-if file_extension not in ['.csv', '.txt']:
-    print(f"Error: Unsupported file extension {file_extension}. Use .csv or .txt")
-    sys.exit(1)
-if not os.path.exists(smiles_file):
-    print(f"Error: SMILES file {smiles_file} not found")
-    sys.exit(1)
+# Resolve input first so a separate output directory does not change its meaning.
+smiles_file = Path(args.smiles_file).expanduser().resolve()
+file_extension = smiles_file.suffix.lower()
+if file_extension not in {'.csv', '.txt'}:
+    parser.error(f"unsupported input extension {file_extension!r}; use .csv or .txt")
+if not smiles_file.is_file():
+    parser.error(f"SMILES input file does not exist: {smiles_file}")
+
+setting = os.environ.get("HSPIP_PATH")
+if not setting:
+    parser.error("set HSPIP_PATH to the directory containing HSPiP.exe or to the executable itself")
+hspip_exe = Path(setting).expanduser().resolve()
+if hspip_exe.is_dir():
+    hspip_exe = hspip_exe / "HSPiP.exe"
+if not hspip_exe.is_file() or hspip_exe.name.lower() != "hspip.exe":
+    parser.error(f"HSPIP_PATH does not point to HSPiP.exe or its installation directory: {hspip_exe}")
+if not os.access(hspip_exe, os.X_OK):
+    parser.error(f"HSPiP.exe is not executable: {hspip_exe}")
+workdir = Path(os.environ.get("HSPIP_WORKDIR", ".")).expanduser().resolve()
+if not workdir.is_dir() or not os.access(workdir, os.W_OK | os.X_OK):
+    parser.error(f"HSPIP_WORKDIR is not a writable directory: {workdir}")
+os.chdir(workdir)
+
+import numpy as np
+import pandas as pd
+import pyperclip
+from rdkit import Chem
 
 # Set up logging
 logging.basicConfig(
@@ -75,13 +87,6 @@ def canonicalize_smiles(smiles):
         return Chem.MolToSmiles(mol, canonical=True)
     except Exception:
         return None
-
-# Create a batch file to execute HSPiP commands one at a time
-def create_batch_file(smi, batch_file_path, hspip_path, hspip_cmd):
-    with open(batch_file_path, 'w') as f:
-        f.write(f'cd "{hspip_path}"\n')
-        f.write(f'{hspip_cmd} "{smi}"\n')
-        f.write('exit\n')
 
 # Save intermediate results
 def save_intermediate_results(all_hsp_full, original_smiles, timestamp, batch_count):
@@ -122,8 +127,9 @@ def save_intermediate_results(all_hsp_full, original_smiles, timestamp, batch_co
 try:
     if file_extension == '.csv':
         all_smiles_df = pd.read_csv(smiles_file)
-        if 'all_smiles' in all_smiles_df.columns:
-            all_smiles = all_smiles_df['all_smiles'].tolist()
+        name = next((col for col in all_smiles_df.columns if col.casefold() in {"smiles", "all_smiles"}), None)
+        if name is not None:
+            all_smiles = all_smiles_df[name].tolist()
         else:
             all_smiles_df = pd.read_csv(smiles_file, header=None)
             all_smiles = all_smiles_df[0].tolist()
@@ -164,10 +170,6 @@ for i, smi in enumerate(all_smiles):
 
 logger.info(f"Found {len(invalid_smiles_indices)} invalid SMILES at indices: {sorted(invalid_smiles_indices)}")
 
-# HSPiP configuration - Replace with your local HSPiP installation path
-hspip_path = 'PATH_TO_HSPIP_INSTALLATION'  # e.g., 'C:\\Program Files\\Hansen-Solubility\\HSPiP'
-hspip_cmd = 'HSPiP.exe Y-MBSX'
-
 # Timestamp for output files
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -195,18 +197,17 @@ def process_smiles_batch(smiles_list, batch_size, max_retries, max_output_retrie
                         invalid_smiles_indices.append(original_index)
                         break
 
-                    # Create temporary batch file
-                    batch_file_path = os.path.join(os.getcwd(), f'temp_hspip_{original_index}.bat')
+                    # HSPiP's CLI writes Out.dat in its installation directory.
+                    output_path = hspip_exe.parent / "Out.dat"
+                    previous_output = output_path.stat().st_mtime_ns if output_path.is_file() else None
+                    subprocess.run(
+                        [str(hspip_exe), "Y-MBSX", canon_smi],
+                        cwd=hspip_exe.parent,
+                        check=True,
+                    )
 
-                    create_batch_file(canon_smi, batch_file_path, hspip_path, hspip_cmd)
-
-                    # Execute batch file
-                    subprocess.run(batch_file_path, shell=True, check=True)
-
-                    # Read output with retries for empty/invalid files
-                    output_path = os.path.join(hspip_path, 'Out.dat')
                     for output_retry in range(max_output_retries):
-                        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                        if output_path.is_file() and output_path.stat().st_size > 0 and output_path.stat().st_mtime_ns != previous_output:
                             try:
                                 opts = pd.read_csv(output_path, delimiter='\t', skiprows=1, names=[
                                     "HSPiP_SMILES", "Formula", "D", "P", "H", "HDon", "HAcc", "MWt", "Density", "MVol",
@@ -233,18 +234,10 @@ def process_smiles_batch(smiles_list, batch_size, max_retries, max_output_retrie
                         break
                     else:
                         logger.warning(f"Max output retries reached for SMILES at original index {original_index} ({round_desc} round): {smi}")
-                        if round_desc == "initial":
-                            failed_output_smiles.append((smi, original_index))
-                        else:
-                            invalid_smiles_indices.append(original_index)
                         break
                 except Exception as e:
                     logger.error(f"Error processing SMILES at original index {original_index} ({round_desc} round, retry {retry + 1}/{max_retries}): {smi}: {e}")
                     time.sleep(retry_delay)
-                finally:
-                    # Clean up batch file
-                    if os.path.exists(batch_file_path):
-                        os.remove(batch_file_path)
 
             if not success:
                 logger.error(f"Failed to process SMILES at original index {original_index} ({round_desc} round) after {max_retries} retries: {smi}")
@@ -275,29 +268,26 @@ def process_smiles_batch(smiles_list, batch_size, max_retries, max_output_retrie
         logger.info(f"Saving intermediate results at end of {round_desc} round after {batch_count} batches")
         save_intermediate_results(all_hsp_full, original_smiles, timestamp, batch_count)
 
-# Initial processing of valid SMILES
+    return all_hsp_full, failed_output_smiles
+
+# Initial processing and one second round for failed outputs.
 batch_size = 100
 max_retries = 3
 max_output_retries = 3
-retry_delay = 2  # seconds
-clipboard_delay = 2  # Increased delay to avoid clipboard contention
-process_smiles_batch(valid_smiles, batch_size, max_retries, max_output_retries, retry_delay, clipboard_delay, "initial")
-
-# Second round for failed SMILES
+retry_delay = 2
+clipboard_delay = 2
+all_hsp_full, failed_output_smiles = process_smiles_batch(
+    valid_smiles, batch_size, max_retries, max_output_retries, retry_delay, clipboard_delay, "initial"
+)
 if failed_output_smiles:
-    logger.info(f"Starting second round processing for {len(failed_output_smiles)} SMILES that failed due to empty/invalid output")
-    process_smiles_batch(failed_output_smiles, batch_size, max_retries, max_output_retries, retry_delay, clipboard_delay, "retry")
+    logger.info("Starting second round for %d SMILES", len(failed_output_smiles))
+    retried_results, _ = process_smiles_batch(
+        failed_output_smiles, batch_size, max_retries, max_output_retries,
+        retry_delay, clipboard_delay, "retry"
+    )
+    all_hsp_full.extend(retried_results)
 else:
     logger.info("No SMILES required a second round of processing")
-
-# Return to original directory - Replace with your working directory if needed
-fold = 'PATH_TO_WORKING_DIRECTORY'  # e.g., 'C:\\Users\\YourUser\\Projects\\AI\\Retrieve'
-try:
-    os.chdir(fold)
-    logger.info(f"Returned to original directory: {fold}")
-except OSError as e:
-    logger.error(f"Failed to change directory to {fold}: {e}")
-    raise
 
 # Combine results while preserving original order
 if all_hsp_full:
