@@ -1,7 +1,6 @@
 [![DOI](https://zenodo.org/badge/1048602949.svg)](https://doi.org/10.5281/zenodo.18475398)
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/glsalierno/pubchem-toxinfo-cas-retriever/blob/main/LICENSE)
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.x](https://img.shields.io/badge/python-3.x-blue.svg)](https://www.python.org/downloads/)
-[![MATLAB](https://img.shields.io/badge/MATLAB-R2014b%2B-orange.svg)](https://www.mathworks.com/products/matlab.html)
 # CAS to SMILES and HSP Retrieval
 
 This repository provides scripts to retrieve SMILES, InChI, IUPAC names, and other chemical properties from PubChem using CAS numbers, then compute Hansen Solubility Parameters (HSP) using the HSPiP software. It supports integration between MATLAB and Python for efficient chemical data processing.
@@ -21,36 +20,26 @@ This repository provides scripts to retrieve SMILES, InChI, IUPAC names, and oth
 - `README.md`: This file.
 - `LICENSE`: MIT license.
 
-## Requirements
-### Must-Haves
-- **Python 3.x** … (unchanged)
-- **MATLAB** … (unchanged)
-- **HSPiP Software**: Must be installed with CLI mode enabled.  
-  Obtain from the official HSPiP website: [HSPiP | Hansen Solubility Parameters](https://www.hansen-solubility.com/HSPiP).  
-  CLI requires a specific license—contact HSPiP support if unsure.  
-  For details on the Command Line Interface, see [HSPiP CLI Documentation](https://www.hansen-solubility.com/HSPiP/CLI.php).
+## Install and configure
 
-### Optional
-- A MATLAB `.mat` file with CAS numbers (see example below).
+For PubChem retrieval, install Python 3.10+ and run
+`python -m pip install -r requirements.txt` in this checkout. For the Windows
+HSPiP CLI also run `python -m pip install -r requirements-hspip.txt`.
+HSPiP must be licensed for CLI use; see the [official CLI documentation](https://www.hansen-solubility.com/HSPiP/CLI.php).
+MATLAB is only needed for the legacy MATLAB workflow.
 
-**Note**: No internet access is needed for HSPiP computation, but PubChem queries require it. Ensure compliance with [PubChem API terms](https://pubchem.ncbi.nlm.nih.gov/docs/programmatic-access).
+For the Python HSPiP workflow, set these variables in the PowerShell session:
 
----
+```powershell
+$env:HSPIP_PATH = 'C:\Program Files\Hansen-Solubility\HSPiP'
+$env:HSPIP_WORKDIR = (Get-Location).Path
+```
 
-> **⚠️ IMPORTANT: Update Paths Before Running**
->
-> You **must** edit `HSPiP_CLI_v7.py` (and optionally `CAS2SMILES2HSPiP.m`):
->
-> - **Line 151** → `hspip_path = 'PATH_TO_HSPIP_INSTALLATION'`  
->   Example: `'C:\\Program Files\\Hansen-Solubility\\HSPiP'`
->
-> - **Line 251** → `fold = 'PATH_TO_WORKING_DIRECTORY'` (optional)  
->   Only needed if you want the script to return to a specific folder after processing.  
->   You can comment out or delete these two lines if everything runs in the same folder.
->
-> Replace the placeholder strings with your actual paths (use double backslashes `\\` on Windows).
-
-**Note**: No internet access is needed for HSPiP computation, but PubChem queries require it. Ensure compliance with [PubChem API terms](https://pubchem.ncbi.nlm.nih.gov/docs/programmatic-access) (e.g., rate limits: ~5 requests/second).
+`HSPIP_PATH` is the directory containing `HSPiP.exe`, or the full executable path.
+`HSPIP_WORKDIR` is an existing writable directory used for logs and final output;
+it defaults to the current directory. The input path is resolved before switching
+to the output directory. HSPiP still writes its intermediate `Out.dat` to its
+installation directory, so use a writable installation and one batch at a time.
 
 ## Quick Start Guide
 ### Option 1: Full MATLAB-Python Workflow (Recommended for CAS Lists)
@@ -61,7 +50,7 @@ This repository provides scripts to retrieve SMILES, InChI, IUPAC names, and oth
                         cas_list = {'50-00-0', '67-56-1'};  % Formaldehyde and Methanol CAS numbers
                         save('cas_input.mat', 'cas_list');
 
-4. Update paths in `CAS2SMILES2HSPiP.m` and other scripts (e.g., HSPiP install dir, Python executable). **as shown in the ⚠️ IMPORTANT box above.**
+4. For this legacy MATLAB path, set the installation directory in `CAS2SMILES2HSPiP.m` and make sure the Python interpreter is on PATH.
 5. Run in MATLAB: Open and execute `CAS2SMILES2HSPiP.m`. It will:
 - Load CAS from `.mat`.
 - Call `get_smiles_InChI_IUPAC_props.py` for PubChem data.
@@ -76,7 +65,7 @@ This repository provides scripts to retrieve SMILES, InChI, IUPAC names, and oth
                       C=O
                       CO
 
-2. Update paths in `HSPiP_CLI_v7.py`.
+2. Set `HSPIP_PATH` and optionally `HSPIP_WORKDIR` as shown above. No Python file needs editing.
 3. Run: `python HSPiP_CLI_v7.py smiles_input.csv` (or `.txt`).
 4. Output: HSP values in a new CSV, with logs for retries/failures.
 
@@ -88,7 +77,7 @@ This repository provides scripts to retrieve SMILES, InChI, IUPAC names, and oth
 ## Troubleshooting
 - **PubChem Errors**: Check API status; add delays if hitting rate limits.
 - **HSPiP Fails**: Verify CLI license and paths. Test HSPiP CLI manually first.
-- **RDKit Issues**: Ensure conda installation; common for dependency conflicts.
+- **RDKit issues**: Install the optional requirements in a fresh supported Python environment.
 - **MATLAB-Python Bridge Fails**: Confirm Python executable path in MATLAB (use `pyenv`).
 - If stuck, open an issue with error logs.
 
@@ -105,3 +94,18 @@ If you have questions or need help adapting this, feel free to ask!
 - HSPiP CLI Guide: [HSPiP Command Line Interface.docx](https://www.hansen-solubility.com/contents/HSPiP%20Command%20Line%20Interface.docx)
 - PubChem API: [Programmatic Access Documentation](https://pubchem.ncbi.nlm.nih.gov/docs/programmatic-access)
 - RDKit: [Official Documentation](https://www.rdkit.org/docs/)
+
+## Offline tests
+
+```text
+python -m pip install -r requirements.txt
+python -m unittest discover -s tests -v
+```
+
+The tests mock PubChem requests; CI does not call PubChem or exercise MATLAB.
+Network calls are paced in each process and retry HTTP 429 or 503 at most twice.
+The tool honors Retry-After. If PubChem requests a wait over 30 seconds, the
+tool does not retry early or issue a new request during that cooldown. Keep
+batch sizes modest and follow [PubChem's usage policy](https://pubchem.ncbi.nlm.nih.gov/docs/programmatic-access).
+
+CI validates the Python configuration errors, but cannot execute the licensed HSPiP program.
